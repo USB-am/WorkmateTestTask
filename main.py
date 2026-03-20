@@ -54,7 +54,7 @@ import csv
 import argparse
 import statistics
 from _io import TextIOWrapper
-from typing import Any, Set, List, Dict, Generator, Optional
+from typing import Any, Set, List, Generator, Optional
 
 from tabulate import tabulate
 
@@ -70,6 +70,20 @@ class CSVReader:
         rows = csv.DictReader(self._csv_file)
         for row in rows:
             yield row
+
+
+def get_csv_readers(files: List[str]) -> List[CSVReader]:
+    csv_files = []
+    for csv_file_path in files:
+        is_csv = csv_file_path.lower().endswith(VALID_EXTENSION)
+        is_exists = os.path.exists(csv_file_path)
+        if not is_csv or not is_exists:
+            continue
+
+        csv_file = open(csv_file_path, mode='r', encoding='utf-8')
+        reader = CSVReader(csv_file)
+        csv_files.append(reader)
+    return csv_files
 
 
 class ReportRow:
@@ -96,12 +110,6 @@ class ReportRow:
     @value.setter
     def value(self, value: Any) -> None:
         self._value = value
-
-    def __str__(self):
-        if self.value is None:
-            return f'{self.identifier} has values={self.values}'
-        else:
-            return f'{self.identifier} has value={self.value}'
 
 
 class _BaseReport:
@@ -147,13 +155,15 @@ class _MedianCoffee(_BaseReport):
         return median
 
 
-class _MedianPerfomance(_BaseReport):
-    title = 'median-perfomance'
+class _AverageSleepTime(_BaseReport):
+    title = 'sleep-hours'
     identifier_column_name = 'student'
-    calc_column_name = 'study_hours'
+    calc_column_name = 'sleep_hours'
 
-    def calc_func(self) -> float:
-        pass
+    def calc_func(self, row: ReportRow) -> float:
+        values = map(float, row.values)
+        mean = statistics.fmean(values)
+        return mean
 
 
 class Report:
@@ -175,26 +185,16 @@ def main():
                             required=True,
                             help='Waiting to receive a file, files, or directory with .csv files.',
                             metavar='FILE')
+    report_help_text = 'Variables: ' + ', '.join([f'"{cls.title}"' for cls in Report.isinstancies])
     arg_parser.add_argument('-r',
                             '--report',
-                            help='Waiting for report title to be received',
+                            help=f'Waiting for report title to be received. {report_help_text}',
                             default='median-coffee')
     args = arg_parser.parse_args()
+    csv_files = get_csv_readers(args.files)
+    report_title = args.report
 
-    csv_files: List[CSVReader] = []
-    for csv_file_path in args.files:
-        is_csv = csv_file_path.lower().endswith(VALID_EXTENSION)
-        is_exists = os.path.exists(csv_file_path)
-        if not is_csv or not is_exists:
-            continue
-
-        csv_file = open(csv_file_path, mode='r', encoding='utf-8')
-        reader = CSVReader(csv_file)
-        csv_files.append(reader)
-
-    report = Report('median-coffee', csv_files=csv_files)
-    # c = report.calculate()
-    # print(*c, sep='\n')
+    report = Report(report_title, csv_files=csv_files)
     print(report.table_report())
 
 
